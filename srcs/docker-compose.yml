@@ -1,0 +1,55 @@
+services:
+  mariadb:
+    build: ./requirements/mariadb # Where to take the dockerfile from - NEVER pull from DockerHub
+    container_name: mariadb
+    restart: on-failure # Note: We don't restart when shutting the container down manually
+    env_file:
+      - .env
+    volumes:
+      - db_data:/var/lib/mysql # Mount named volume into MariaDB's data directory
+    networks:
+      - inception_net
+
+  wordpress:
+    build: ./requirements/wordpress # Where to take the dockerfile from - NEVER pull from DockerHub
+    container_name: wordpress
+    restart: on-failure
+    env_file:
+      - .env
+    volumes:
+      - wp_data:/var/www/wordpress # Mount named volume into WordPress files directory
+    networks:
+      - inception_net
+    depends_on:
+      - mariadb # Start mariadb first, but does not guarantee it's ready for connections
+
+  nginx:
+    build: ./requirements/nginx
+    container_name: nginx
+    restart: on-failure
+    ports:
+      - "443:443" # Only entrypoint into the infrastructure, as required by subject
+    volumes:
+      - wp_data:/var/www/wordpress # Needs access to WordPress files to serve them
+    networks:
+      - inception_net
+    depends_on:
+      - wordpress
+
+volumes:
+  db_data:
+    driver: local
+    driver_opts:
+      type: none    # No special filesystem type, use the host's native fs
+      o: bind       # Bind mount: link the named volume to a real host path
+      device: /home/${USER}/data/db  # Actual host path where DB data is stored
+  wp_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /home/${USER}/data/wordpress  # Actual host path where WordPress files are stored
+
+networks:
+  inception_net:
+    driver: bridge # Private network between containers - host network is forbidden by subject
